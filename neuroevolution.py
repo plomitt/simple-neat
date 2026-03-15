@@ -49,6 +49,9 @@ class Genome:
         self.fitness = 0.0
         self.is_innovative = False # Flag for 1-generation immunity
 
+        self.fitness_history = []
+        self.effective_fitness = 0.0
+
     def build_phenotype(self):
         """Translates the Genome data into a physical, runnable Network graph."""
         net = Network()
@@ -117,7 +120,7 @@ class Genome:
                 random.choice(hiddens).activation = random.choice(available_activations)
 
         # 2. Structural Mutations
-        if random.random() < 0.8:
+        if random.random() < 0.25:
             struct_choice = random.choice(['add_node', 'add_conn', 'rm_node', 'rm_conn', 'swap'])
             
             if struct_choice == 'add_node' and self.conns:
@@ -148,7 +151,7 @@ class Genome:
                 innov = random.choice(list(self.conns.keys()))
                 del self.conns[innov]
                 
-            elif struct_choice == 'rm_node' and hiddens:
+            elif struct_choice == 'rm_node' and hiddens and random.random() < 0.125:
                 n = random.choice(hiddens)
                 del self.nodes[n.id]
                 orphans =[i for i, c in self.conns.items() if c.source == n.id or c.target == n.id]

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NEAT Snake Evolution</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #fff; text-align: center; }
+        #stats { display: flex; justify-content: space-around; padding: 20px; background: #222; margin-bottom: 20px; font-size: 20px; font-weight: bold; }
+        #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; padding: 10px; }
+        .game-container { background: #333; padding: 10px; border-radius: 8px; }
+        canvas { background: #000; border: 1px solid #555; width: 100%; image-rendering: pixelated; }
+        .score { margin-top: 5px; font-size: 14px; }
+        .dead { opacity: 0.4; }
+    </style>
+</head>
+<body>
+
+    <div id="stats">
+        <div>Generation: <span id="gen">1</span></div>
+        <div>Gen Best: <span id="current_best">0</span></div>
+        <div style="color: lightgreen;">All-Time Best: <span id="all_time_best">0</span></div>
+    </div>
+
+    <div id="grid"></div>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:8765");
+        const grid = document.getElementById("grid");
+        const canvases = {}; 
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            // Update Headers
+            document.getElementById("gen").innerText = data.generation;
+            document.getElementById("current_best").innerText = data.best_current;
+            document.getElementById("all_time_best").innerText = data.best_all_time;
+
+            const CELL_SIZE = 10;
+            const CANVAS_SIZE = data.grid_size * CELL_SIZE;
+
+            // Update each game in the grid
+            data.games.forEach(game => {
+                // Create canvas if it doesn't exist
+                if (!canvases[game.id]) {
+                    const container = document.createElement("div");
+                    container.className = "game-container";
+                    
+                    const canvas = document.createElement("canvas");
+                    canvas.width = CANVAS_SIZE;
+                    canvas.height = CANVAS_SIZE;
+                    
+                    const score = document.createElement("div");
+                    score.className = "score";
+                    
+                    container.appendChild(canvas);
+                    container.appendChild(score);
+                    grid.appendChild(container);
+                    
+                    canvases[game.id] = { canvas, ctx: canvas.getContext("2d"), scoreEl: score, container };
+                }
+
+                const cvs = canvases[game.id];
+                
+                // Update CSS Opacity if dead
+                cvs.container.className = game.dead ? "game-container dead" : "game-container";
+                cvs.scoreEl.innerText = `ID: ${game.id} | Score: ${game.score}`;
+
+                // Draw Game
+                const ctx = cvs.ctx;
+                ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+                if (game.apple) {
+                    ctx.fillStyle = "red";
+                    ctx.fillRect(game.apple[0] * CELL_SIZE, game.apple[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                }
+
+                game.snake.forEach((segment, index) => {
+                    // Head is lime green, body is dark green
+                    ctx.fillStyle = index === 0 ? "lime" : "green";
+                    ctx.fillRect(segment[0] * CELL_SIZE, segment[1] * CELL_SIZE, CELL_SIZE-1, CELL_SIZE-1);
+                });
+            });
+        };
+    </script>
+</body>
+</html>
