@@ -1,5 +1,6 @@
 from neuroevolution import EvolutionManager
 from viz import save_network_to_json
+from viz2 import visualize_network
 
 XOR_DATA = [
     ([0, 0], [0]),
@@ -32,3 +33,4 @@ for x, y in XOR_DATA:
     print(f"In: {x} -> Out: {pred:.4f} (Target {y[0]})")
 
 save_network_to_json(best_net, "best_net/xor_champion.json")
+visualize_network(best_net)
