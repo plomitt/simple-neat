@@ -1,86 +1,68 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>NEAT Snake Evolution</title>
-    <style>
-        body { font-family: sans-serif; background: #111; color: #fff; text-align: center; }
-        #stats { display: flex; justify-content: space-around; padding: 20px; background: #222; margin-bottom: 20px; font-size: 20px; font-weight: bold; }
-        #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; padding: 10px; }
-        .game-container { background: #333; padding: 10px; border-radius: 8px; }
-        canvas { background: #000; border: 1px solid #555; width: 100%; image-rendering: pixelated; }
-        .score { margin-top: 5px; font-size: 14px; }
-        .dead { opacity: 0.4; }
-    </style>
-</head>
-<body>
-
-    <div id="stats">
-        <div>Generation: <span id="gen">1</span></div>
-        <div>Gen Best: <span id="current_best">0</span></div>
-        <div style="color: lightgreen;">All-Time Best: <span id="all_time_best">0</span></div>
+<!DOCTYPE html><html><head><title>NEAT Snake</title>
+<style>
+    body { display:flex; margin:0; height:100vh; font-family:monospace; background:#111; color:#eee; }
+    #side { width:300px; background:#1a1a24; padding:15px; display:flex; flex-direction:column; gap:10px; border-right:1px solid #333; }
+    .row { display:flex; gap:5px; }
+    button { flex:1; padding:8px; cursor:pointer; background:#333; color:#fff; border:1px solid #555; border-radius:4px; font-weight:bold;}
+    button:hover { background:#444; }
+    .param { display:flex; justify-content:space-between; font-size:12px; }
+    .param input { width:55px; background:#000; color:#4ade80; border:1px solid #444; text-align:right;}
+    #logs { flex-grow:1; overflow-y:auto; font-size:11px; color:#aaa; background:#000; padding:8px; border:1px solid #333; }
+    #main { flex-grow:1; display:flex; flex-direction:column; }
+    #stats { display:flex; justify-content:space-around; padding:10px; background:#15151c; font-size:16px; border-bottom:1px solid #333; }
+    #grid { display:flex; flex-wrap:wrap; gap:8px; padding:15px; overflow-y:auto; align-content:start;}
+    .game { background:#222; padding:5px; text-align:center; border-radius:4px; border:1px solid #333;}
+    canvas { background:#000; image-rendering:pixelated; width:130px; height:130px; }
+</style></head><body>
+<div id="side">
+    <div class="row">
+        <button onclick="send('play')" style="background:#166534">PLAY</button>
+        <button onclick="send('pause')" style="background:#991b1b">PAUSE</button>
+        <button onclick="send('reset')">RESET</button>
     </div>
-
+    <div class="row" style="margin-top: 5px;">
+        <button onclick="send('save_best')" style="background:#2563eb">SAVE BEST JSON</button>
+    </div>
+    <div id="settings" style="display:flex; flex-direction:column; gap:4px;"></div>
+    <div id="logs"></div>
+</div>
+<div id="main">
+    <div id="stats">Gen: <b id="g">1</b> | Current Best: <b id="cb" style="color:#60a5fa">0</b> | All-Time: <b id="ab" style="color:#fbbf24">0</b></div>
     <div id="grid"></div>
+</div>
+<script>
+    const ws = new WebSocket("ws://localhost:8765");
+    const D = document, grid = D.getElementById("grid"), logs = D.getElementById("logs"), set = D.getElementById("settings");
+    let ctxs = {};
+    
+    const send = cmd => ws.send(JSON.stringify({cmd}));
+    const update = (k, v) => ws.send(JSON.stringify({cmd:'update', key:k, val:v}));
 
-    <script>
-        const ws = new WebSocket("ws://localhost:8765");
-        const grid = document.getElementById("grid");
-        const canvases = {}; 
-
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+    ws.onmessage = e => {
+        const d = JSON.parse(e.data);
+        if(d.type == "log") { logs.innerHTML += `<div style="border-bottom:1px dotted #333; padding:2px 0;">> ${d.msg}</div>`; logs.scrollTop = logs.scrollHeight; }
+        if(d.type == "config") {
+            set.innerHTML = Object.keys(d.cfg).map(k => 
+                `<div class="param"><span>${k.replace('prob_','')}</span><input value="${d.cfg[k]}" onchange="update('${k}', this.value)"></div>`
+            ).join('');
+        }
+        if(d.type == "state") {
+            D.getElementById("g").innerText = d.gen; D.getElementById("cb").innerText = d.best; D.getElementById("ab").innerText = d.all;
             
-            // Update Headers
-            document.getElementById("gen").innerText = data.generation;
-            document.getElementById("current_best").innerText = data.best_current;
-            document.getElementById("all_time_best").innerText = data.best_all_time;
-
-            const CELL_SIZE = 10;
-            const CANVAS_SIZE = data.grid_size * CELL_SIZE;
-
-            // Update each game in the grid
-            data.games.forEach(game => {
-                // Create canvas if it doesn't exist
-                if (!canvases[game.id]) {
-                    const container = document.createElement("div");
-                    container.className = "game-container";
-                    
-                    const canvas = document.createElement("canvas");
-                    canvas.width = CANVAS_SIZE;
-                    canvas.height = CANVAS_SIZE;
-                    
-                    const score = document.createElement("div");
-                    score.className = "score";
-                    
-                    container.appendChild(canvas);
-                    container.appendChild(score);
-                    grid.appendChild(container);
-                    
-                    canvases[game.id] = { canvas, ctx: canvas.getContext("2d"), scoreEl: score, container };
-                }
-
-                const cvs = canvases[game.id];
-                
-                // Update CSS Opacity if dead
-                cvs.container.className = game.dead ? "game-container dead" : "game-container";
-                cvs.scoreEl.innerText = `ID: ${game.id} | Score: ${game.score}`;
-
-                // Draw Game
-                const ctx = cvs.ctx;
-                ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-
-                if (game.apple) {
-                    ctx.fillStyle = "red";
-                    ctx.fillRect(game.apple[0] * CELL_SIZE, game.apple[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-                }
-
-                game.snake.forEach((segment, index) => {
-                    // Head is lime green, body is dark green
-                    ctx.fillStyle = index === 0 ? "lime" : "green";
-                    ctx.fillRect(segment[0] * CELL_SIZE, segment[1] * CELL_SIZE, CELL_SIZE-1, CELL_SIZE-1);
-                });
+            // Rebuild Grid only if population size changed or first load
+            if(d.games.length !== Object.keys(ctxs).length) {
+                grid.innerHTML = d.games.map(g => `<div class="game" id="g${g.id}"><canvas id="c${g.id}" width="${d.grid*10}" height="${d.grid*10}"></canvas><div id="s${g.id}" style="font-size:11px;color:#999;margin-top:4px;"></div></div>`).join('');
+                ctxs = {}; d.games.forEach(g => ctxs[g.id] = D.getElementById(`c${g.id}`).getContext('2d'));
+            }
+            
+            // Draw every frame quickly
+            d.games.forEach(g => {
+                D.getElementById(`g${g.id}`).style.opacity = g.dead ? 0.3 : 1;
+                D.getElementById(`s${g.id}`).innerText = `ID: ${g.id} | Score: ${g.score}`;
+                let ctx = ctxs[g.id]; ctx.clearRect(0, 0, d.grid*10, d.grid*10);
+                if(g.apple) { ctx.fillStyle = "#ef4444"; ctx.fillRect(g.apple[0]*10, g.apple[1]*10, 10, 10); }
+                g.snake.forEach((s,i) => { ctx.fillStyle = i==0 ? "#4ade80" : "#166534"; ctx.fillRect(s[0]*10, s[1]*10, 9, 9); });
             });
-        };
-    </script>
-</body>
-</html>
+        }
+    };
+</script></body></html>

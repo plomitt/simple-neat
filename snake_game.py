@@ -53,7 +53,7 @@ class SnakeGame:
         self.steps_since_eat += 1
         
         # Starvation mechanic prevents infinite looping cheats
-        if self.steps_since_eat > 100:
+        if self.steps_since_eat > 100 + (self.score * 2):
             self.dead = True
             return
 
